@@ -1,0 +1,14 @@
+1.目標：
+讓機器利用RNN自動產生莎士比亞文本的序列
+2.資料　
+一個txt　模型的input 是固定長度的序列
+以及一個first hidden state value
+
+資料的問題,如果單純就讓機器看到某個seqence of X然後輸出sequence of Y
+而不管first hidden state,機器能夠學習到的pattern最多就是當輸入那個X序列就會output那個Y
+
+然而在今天我們需要的是記住一段內容甚至是整篇文章,只有靠X(假設長度為n)除非N非常大不然沒有辦法記住前文(或後文 目前先用一個方向的的RNN就好)
+
+所以必須要靠first hidden state來達成目的 藉由first hidden state來記住前文
+而first hidden state會和資料是依照怎樣的順序丟到model有關 所以不能亂shuffle
+

@@ -1,5 +1,11 @@
 import tensorflow as tf
 
+
+
+#def build_rnn_model(param):
+
+
+
 class RNN_Model(object):
     def __init__(self):
         pass
@@ -48,7 +54,7 @@ class RNN_Model(object):
         for loss in self.lost_list:
             self.total_lost += loss
         #  optimizition
-        self.lr = tf.Variable(0.001, trainable=False)
+        self.lr = tf.Variable(param.lr, trainable=False)
         self.trainable_vars = tf.trainable_variables()
         self.optimizer = tf.train.AdamOptimizer(self.lr)
         self.train_step = self.optimizer.minimize(self.total_lost)
@@ -78,15 +84,70 @@ class RNN_Model(object):
         return outputs[0], outputs[1], outputs[2], outputs[3]
 
 
+
+
+
+
+
+def generate_batches(param):
+
+    def generate_one_batch(batch_idx):
+        Xs = []
+        ys = []
+        start_idx = batch_idx*param.batch_size*param.max_seq_len
+        for j in range(param.batch_size):
+            Xs.append(param.X[start_idx+j*max_seq_len:start_idx+(j+1)*max_seq_len])
+            ys.append(param.y[start_idx+j*max_seq_len:start_idx+(j+1)*max_seq_len])  
+        return Xs,ys  
+
+
+    
+
+    for i in range(batch_num):
+        yield generate_one_batch(i)
+    #generate one batch
+
+
+class DataManager(object):
+    def __init__(self,param,train_rate=0.7,val_rate=0.3):
+        self.X = param.X
+        self.y = param.y 
+
+        char_num = len(param.X)
+
+        self.batch_size = param.batch_size
+        self.max_seq_len = param.max_seq_len
+        self.batch_num = (n//param.max_seq_len)//param.batch_size
+
+
+        train_char_num = int(char_num*train_rate)
+        val_char_num =   int(char_num*val_rate)
+
+        self.train_X = self.X[0:train_char_num]
+        self.val_X = self.y[]
+
+
+
+
 class Parameter(object):
     def __init__(self,datapath):
+        #model paramter
         self.embedding_dim = 100
         self.hidden_num = 50
+
+        #data parameter
         self.max_seq_len = 4
+        self._data_info(datapath)    
+
+        #training parameter
         self.epoch_num = 100
         self.batch_size = 32
+        self.lr  = 0.01
 
-    def generate_data(self,path):
+
+
+
+    def _data_info(self,path):
         with open(path,"r",encoding="utf-8") as f:
             s = f.read()
             self.vocab = set(s)
@@ -96,11 +157,9 @@ class Parameter(object):
             self.vocab_size = len(self.vocab)
 
             self.X = [self.char2id[c] for c in s]
-            self.y = [None]+self.X
+            self.y = self.X[1:]+[None]
 
-    def generate_batches(self):
-        total_char_num = len(self.X)
-        batch_num = (total_char_num//self.max_seq_len)//self.batch_size
+
 
 
 
