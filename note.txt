@@ -12,3 +12,15 @@
 所以必須要靠first hidden state來達成目的 藉由first hidden state來記住前文
 而first hidden state會和資料是依照怎樣的順序丟到model有關 所以不能亂shuffle
 
+
+在training的時候一個batch裡面每一筆資料是以max_len的方式去分
+
+而在generating的時候 應該是要以一個char一個char的方式
+這個可以利用[None,None]的placeholder做到
+
+而一個一個和max_len的區別因為我們有把final state接到RNN當作下一個
+input 所以在FORWARD PASS的時候沒有什麼差別= = 
+唯一的差別是在訓練的時候BPTT傳播的長度會和
+MAX_LEN有關係 而MAX_LEN的存在就是怕SEQUENCE太長記不起來
+
+
