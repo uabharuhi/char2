@@ -7,7 +7,10 @@ def train_loop(param,model):
     data_manager = DataManager(param)
     with tf.Session() as sess:
         init = tf.global_variables_initializer()
+        writer = tf.summary.FileWriter("log/", graph = sess.graph)
         sess.run(init)
+
+
 
         for i in range(param.epoch_num):
 
@@ -22,31 +25,30 @@ def train_loop(param,model):
                 loss, next_state , _ =  model.step(sess,X_batch,y_batch,state)
                 loss_list.append(loss)
                 state = next_state
-            print( 'training loss %3.f'%( np.mean(loss_list) ) )
+            print( 'training loss %.3f'%( np.mean(loss_list) ) )
+
+            if i%param.val_per_epcoh_num == 0:
+                #validation
+                #做validation好像有點奇怪... 不知道state要不要繼續傳下去= =
+                #應該是要吧
+                state = None
+                loss_list = []
+
+                accuracy_list = []
+                val_generator,_ = data_manager.val_batches()
+
+                for X,y in tqdm(val_generator):
+                    loss,accu,next_state = model.get_loss_and_accuracy(sess,X,y,state)
+                    loss_list.append(loss)
+                    accuracy_list .append(accu)
+                    state = next_state
+
+                print('validation loss %.3f'%(np.mean(loss_list) ))
+                print('validation accuracy %.3f'%(np.mean(accuracy_list) ))
 
 
-            state = None
-            loss_list = []
-
-            accuracy_list = []
-            val_generator,_ = data_manager.val_batches()
-
-            for X,y in tqdm(val_generator):
-                loss,accu,next_state = model.get_loss_and_accuracy(sess,X,y,state)
-                loss_list.append(loss)
-                accuracy_list .append(accu)
-                state = next_state
-
-            print('validation loss %.3f'%(np.mean(loss_list) ))
-            print('validation accuracy %.3f'%(np.mean(accuracy_list) ))
-
-
-            #validation
-            #做validation好像有點奇怪... 不知道state要不要繼續傳下去= =
-            #應該是要吧
-
-            #save
             if  i%param.save_per_epcoh_num == 0:
+            #save
                 path = os.path.join(param.save_path, "model.ckpt")
                 print("Saving the model at Epoch %i." %(i))
                 model.saver.save(sess, path,
@@ -157,15 +159,27 @@ class RNN_Model(object):
                           shape_invariants=[cnt.get_shape(),tf.TensorShape([None]),magic_shape ])
         #https://stackoverflow.com/questions/40432289/tensorflow-reshape-with-variable-length
         self.reshaped_prob_tensor  = tf.reshape(self.prob_list, (batch_size,self.max_seq_len,vocab_size))
+
+
+
         self.prediction = tf.argmax(self.reshaped_prob_tensor , axis=2)
-        print(self.prediction.shape)
         self.reshaped_loss_list  = tf.reshape(self.loss_list, (batch_size,self.max_seq_len))
-        self.total_loss = tf.reduce_mean(tf.reduce_sum(self.reshaped_loss_list,axis=0))
+        #self.reshaped_loss_list = tf.Print(self.reshaped_loss_list ,[self.reshaped_loss_list ],"losses"
+                                           #,summarize=61,first_n=10)
+        #全部都一起拿進來算gradient會和本來的每一筆batch加起來之後平均算gradient
+        #在反向傳播上應該是有區別的
+        #
 
+        self.total_loss = tf.reduce_mean(tf.reduce_sum(self.reshaped_loss_list,axis=1))
 
+        #self.total_loss = tf.Print(self.total_loss ,[self.total_loss ],"loss")
+        #print( self.total_loss.get_shape())
         equality = tf.equal(tf.cast(self.prediction, tf.int32), self.y)
 
+
         self.accuracy =  tf.reduce_mean(tf.cast(equality, tf.float32))
+
+
 
 
         #輸出每一個timestep的loss
@@ -401,8 +415,9 @@ class Parameter(object):
         self._data_info(datapath)
 
         #training parameter
-        self.epoch_num = 10
+        self.epoch_num = 200
         self.batch_size = 32
+        self.val_per_epcoh_num = 5
         self.lr  = 0.01
 
         #save parameter

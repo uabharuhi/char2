@@ -1,8 +1,7 @@
-import tensorflow as tf
-import numpy as np
+
 import model
 
-DATAPATH = './data/data.txt'
+DATAPATH = './data/small2.txt'
 parameter = model.Parameter(DATAPATH)
 data_manager = model.DataManager(parameter)
 rnn_model = model.RNN_Model(parameter)

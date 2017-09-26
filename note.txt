@@ -23,4 +23,12 @@ input 所以在FORWARD PASS的時候沒有什麼差別= =
 唯一的差別是在訓練的時候BPTT傳播的長度會和
 MAX_LEN有關係 而MAX_LEN的存在就是怕SEQUENCE太長記不起來
 
+3.debug
+用tensorflow視覺化 
+(gpu) D:\ml_exp\char>tensorboard --logdir=D:\ml_exp\char\log
+還有這一行要加入
+writer = tf.summary.FileWriter("log/", graph = sess.graph)
+注意這裡路徑在windows上面用相對路徑可能用不出來
+然後不用加字串的引號
+
 
