@@ -417,7 +417,7 @@ class Parameter(object):
     def __init__(self,datapath):
         #model paramter
         self.embedding_dim = 100
-        self.hidden_num = 50
+        self.hidden_num = 512
         self.rnn_layer_num = 3
         #data parameter
         self.max_seq_len = 4
