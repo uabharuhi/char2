@@ -31,4 +31,7 @@ writer = tf.summary.FileWriter("log/", graph = sess.graph)
 注意這裡路徑在windows上面用相對路徑可能用不出來
 然後不用加字串的引號
 
+4.當字元只有7000個左右的時候還是沒有辦法在training set 上面
+把loss降到3以下 所以用learning rate annealing
+
 

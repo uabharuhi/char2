@@ -18,14 +18,17 @@ def train_loop(param,model):
 
             train_generator,num_batch_train = data_manager.train_batches()
 
+            sess.run(tf.assign(model.lr, param.lr *param.decay_rate** i))
 
             state = None
             loss_list = []
+            accuracy_list = []
             for X_batch,y_batch in tqdm(train_generator):
-                loss, next_state , _ =  model.step(sess,X_batch,y_batch,state)
+                loss,acc, next_state , _ =  model.step(sess,X_batch,y_batch,state)
+                accuracy_list.append(acc)
                 loss_list.append(loss)
                 state = next_state
-            print( 'training loss %.3f'%( np.mean(loss_list) ) )
+            print( 'training loss %.3f       acc:%.3f'%( np.mean(loss_list),(np.mean(accuracy_list) ) ))
 
             if i%param.val_per_epcoh_num == 0:
                 #validation
@@ -56,7 +59,7 @@ def train_loop(param,model):
             #sample...
 
             if  i%param.sample_per_epcoh_num == 0:
-                print("sampling at Epoch %i." %(i))
+                print("sampling at Epoch %i. - - - - - - - - -- - - - - - - -" %(i))
                 samples = model.sample_precess(sess,param.sample_num,param.sample_max_len,param.id2char)
                 for si,sample in enumerate(samples):
                     path = os.path.join(param.sample_save_path,"sample_ep%d_%d.txt"%(i, si))
@@ -79,7 +82,7 @@ class RNN_Model(object):
         self.embedding_dim = param.embedding_dim
         self.hidden_num = param.hidden_num
         self.output_dim = param.vocab_size
-
+        self.rnn_layer_num = param.rnn_layer_num
 
         vocab_size = param.vocab_size
                                                 #         batch_size,max_len_seq of ids
@@ -211,8 +214,13 @@ class RNN_Model(object):
 
 
     def rnn_cell(self):
-        cell = tf.contrib.rnn.BasicLSTMCell(self.hidden_num)
+        cell_list = []
+        for i in range(self.rnn_layer_num):
+            cell = tf.contrib.rnn.BasicLSTMCell(self.hidden_num)
+            cell_list.append(cell)
+        cell = tf.contrib.rnn.MultiRNNCell(cell_list)
         return cell
+
     def generate_input_feed(self,X,y=None,state=None):
         feed  = {self.X:X}
         if  y is not None:
@@ -224,10 +232,11 @@ class RNN_Model(object):
     def step(self,sess,batch_X,batch_y,initial_state=None):
         input_feed = self.generate_input_feed(batch_X,batch_y,initial_state)
         output_feed = [self.total_loss,
+                       self.accuracy,
                        self.final_state,
                        self.train_step]
         outputs = sess.run(output_feed, input_feed)
-        return outputs[0], outputs[1], outputs[2]
+        return outputs[0], outputs[1], outputs[2],outputs[3]
 
 
     def prob_each_timestep(self,sess,batch_X,state=None):
@@ -409,16 +418,17 @@ class Parameter(object):
         #model paramter
         self.embedding_dim = 100
         self.hidden_num = 50
-
+        self.rnn_layer_num = 3
         #data parameter
         self.max_seq_len = 4
         self._data_info(datapath)
 
         #training parameter
-        self.epoch_num = 200
+        self.epoch_num = 400
         self.batch_size = 32
         self.val_per_epcoh_num = 5
         self.lr  = 0.01
+        self.decay_rate =0.98
 
         #save parameter
         self.save_path = './save'
@@ -427,7 +437,7 @@ class Parameter(object):
         # sample parameter
         self.sample_max_len = 200
         self.sample_num = 3
-        self.sample_per_epcoh_num = 5
+        self.sample_per_epcoh_num = 10
         self.sample_save_path = './gen'
 
 
