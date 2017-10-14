@@ -3,13 +3,35 @@ import numpy as np
 from tqdm import tqdm
 import os
 
-def train_loop(param,model):
+
+def sample2file(sess,model,file_prefix,param,random=True):
+    print("sampling . .. . . . .. . .")
+    if not random:
+        samples = model.sample_process(sess,param.sample_num,param.sample_max_len,param.id2char)
+    else:
+         samples = model.random_sample_process(sess,param.sample_num,param.sample_max_len,param)
+    for si,sample in enumerate(samples):
+        path = os.path.join(param.sample_save_path,"%s_%d.txt"%(file_prefix,si))
+        with open(path,"w",encoding="utf-8") as f:
+            f. write(sample)
+
+def train_loop(param,model,reload=False):
     data_manager = DataManager(param)
     with tf.Session() as sess:
-        init = tf.global_variables_initializer()
-        writer = tf.summary.FileWriter("log/", graph = sess.graph)
-        sess.run(init)
+        if not reload:
+            sess.run(tf.global_variables_initializer())
+            saver = tf.train.Saver()
+        else:
+            saver = tf.train.Saver()
+            ckpt = tf.train.get_checkpoint_state(param.save_path)
+            if ckpt and ckpt.model_checkpoint_path:
+                #from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
+                #print_tensors_in_checkpoint_file(ckpt.model_checkpoint_path,[], True)
 
+                saver.restore(sess, ckpt.model_checkpoint_path)
+                print('reload successfully')
+
+        writer = tf.summary.FileWriter("log/", graph = sess.graph)
 
 
         for i in range(param.epoch_num):
@@ -17,18 +39,21 @@ def train_loop(param,model):
             print('start of epoch  %d '%(i))
 
             train_generator,num_batch_train = data_manager.train_batches()
-
-            sess.run(tf.assign(model.lr, param.lr *param.decay_rate** i))
+            if not reload:
+                sess.run(tf.assign(model.lr, param.lr *param.decay_rate** i))
 
             state = None
             loss_list = []
             accuracy_list = []
             for X_batch,y_batch in tqdm(train_generator):
-                loss,acc, next_state , _ =  model.step(sess,X_batch,y_batch,state)
-                accuracy_list.append(acc)
+                #loss,accu,next_state = model.get_loss_and_accuracy(sess,X_batch,y_batch,state)
+                loss,accu,next_state , _ =  model.step(sess,X_batch,y_batch,state)
+                accuracy_list.append(accu)
                 loss_list.append(loss)
                 state = next_state
-            print( 'training loss %.3f       acc:%.3f'%( np.mean(loss_list),(np.mean(accuracy_list) ) ))
+            #print('1234')
+            #print(accuracy_list)
+            print( 'training loss %.3f acc:%.3f'%( np.mean(loss_list),(np.mean(accuracy_list) ) ))
 
             if i%param.val_per_epcoh_num == 0:
                 #validation
@@ -50,17 +75,17 @@ def train_loop(param,model):
                 print('validation accuracy %.3f'%(np.mean(accuracy_list) ))
 
 
-            if  i%param.save_per_epcoh_num == 0:
+            if  i%param.save_per_epcoh_num == 0 and i!=0:
             #save
                 path = os.path.join(param.save_path, "model.ckpt")
                 print("Saving the model at Epoch %i." %(i))
-                model.saver.save(sess, path,
+                saver.save(sess, path,
                 global_step=model.global_step)
             #sample...
 
-            if  i%param.sample_per_epcoh_num == 0:
+            if  i%param.sample_per_epcoh_num == 0 and i!=0:
                 print("sampling at Epoch %i. - - - - - - - - -- - - - - - - -" %(i))
-                samples = model.sample_precess(sess,param.sample_num,param.sample_max_len,param.id2char)
+                samples = model.sample_process(sess,param.sample_num,param.sample_max_len,param.id2char)
                 for si,sample in enumerate(samples):
                     path = os.path.join(param.sample_save_path,"sample_ep%d_%d.txt"%(i, si))
                     with open(path,"w",encoding="utf-8") as f:
@@ -109,7 +134,7 @@ class RNN_Model(object):
 
         #獲得動態的dimention
         batch_size = tf.shape(self.X)[0]
-        #tf.shape(self.X)[1] 是tensorf 因為要在loop用所以加上
+        #tf.shape(self.X)[1] 是tensor 因為要在loop用所以加上
 
         self.max_seq_len =  tf.shape(self.X)[1]
 
@@ -129,20 +154,22 @@ class RNN_Model(object):
 
 
 
-        #dont reshapes first
+
         #要輸出 可是維度是三維,本來的解法應該是要把它reshape然後接起來之類的
         self.W_softmax =  tf.Variable(tf.random_normal((self.hidden_num, vocab_size)), name = "W_softmax")
         self.b_softmax = tf.Variable(tf.constant( vocab_size,dtype=tf.float32), name = "b_softmax")
         # each time step output store as list
-        a =  tf.Variable([[]],dtype=tf.float32)
+        self.a =  tf.Variable([[]],dtype=tf.float32)
         self.loss_list =   tf.Variable([],dtype=tf.float32)
-        self._prob_list =           tf.reshape(a,(batch_size,0))
+        #這裡非常關鍵,可以把一個1*0的reshape成為5*0
+        self._prob_list =           tf.reshape(self.a,(batch_size,0))
 
         cnt = tf.constant(0)
         cond  = lambda cnt,loss_list,prob_list: tf.less(cnt, self.max_seq_len )
 
         def loop_body(cnt,loss_list,prob_list):
             #squeeze 把dimension的大小為1的降維
+            #tf.stack是為了產生slice第一個start index的tensor
             time_output = tf.squeeze(tf.slice(self.lstm_h, tf.stack([0,cnt, 0]), [-1,1,-1]),[1])
             #<batch_size,vocab_size>
             logits =  tf.matmul(time_output, self.W_softmax) + self.b_softmax
@@ -155,6 +182,7 @@ class RNN_Model(object):
             return  cnt+1,loss_list,prob_list
         #tensorflow規定每一個當作參數的tensor的shape在while內不能變動,如果要變動必須要用None
         # TODO
+        #參考到別的tensor的shape產生另外一種shape的tensor
         d = self._prob_list.get_shape().as_list()
         d[1]=None
         magic_shape = tf.TensorShape(d)
@@ -162,8 +190,6 @@ class RNN_Model(object):
                           shape_invariants=[cnt.get_shape(),tf.TensorShape([None]),magic_shape ])
         #https://stackoverflow.com/questions/40432289/tensorflow-reshape-with-variable-length
         self.reshaped_prob_tensor  = tf.reshape(self.prob_list, (batch_size,self.max_seq_len,vocab_size))
-
-
 
         self.prediction = tf.argmax(self.reshaped_prob_tensor , axis=2)
         self.reshaped_loss_list  = tf.reshape(self.loss_list, (batch_size,self.max_seq_len))
@@ -178,13 +204,7 @@ class RNN_Model(object):
         #self.total_loss = tf.Print(self.total_loss ,[self.total_loss ],"loss")
         #print( self.total_loss.get_shape())
         equality = tf.equal(tf.cast(self.prediction, tf.int32), self.y)
-
-
         self.accuracy =  tf.reduce_mean(tf.cast(equality, tf.float32))
-
-
-
-
         #輸出每一個timestep的loss
         '''
             with tf.Session() as sess:
@@ -200,9 +220,6 @@ class RNN_Model(object):
             -1.5514447026887888
         '''
 
-
-
-
         #  optimizition
         self.lr = tf.Variable(param.lr, trainable=False)
         self.trainable_vars = tf.trainable_variables()
@@ -210,7 +227,7 @@ class RNN_Model(object):
         self.global_step = tf.Variable(0, trainable=False)
         self.train_step = self.optimizer.minimize(self.total_loss,global_step=self.global_step)
         #       saver
-        self.saver = tf.train.Saver(tf.all_variables())
+        #self.saver = tf.train.Saver(tf.global_variables())
 
 
     def rnn_cell(self):
@@ -267,7 +284,7 @@ class RNN_Model(object):
         [1, 2, 3]
         3
         '''
-        prob_each_time_step,final_state = sess.run((self.prob_tensor,self.final_state), input_feed )
+        prob_each_time_step,final_state = sess.run((self.reshaped_prob_tensor,self.final_state), input_feed )
         return (prob_each_time_step,final_state)
 
     def predict_output(self,sess,batch_X,state=None):
@@ -298,7 +315,50 @@ class RNN_Model(object):
         predictions,next_state = sess.run((self.prediction,self.final_state),input_feed)
         return predictions,next_state
 
-    def sample_precess(self,sess,sample_num,sample_len,id2char):
+    def random_sample_process(self,sess,sample_num,sample_len,param):
+        #random generate a char
+        X =  sess.run(tf.random_uniform( (sample_num,1),0,len(param.id2char),tf.int32))
+        state = None
+        sample_output = []
+        for i  in range(sample_len):
+            probs,next_state  = self.prob_each_timestep(sess,X,state)
+
+            #p : <sample_num,seq_len,vocab_size>
+            #print("probs")
+            #print(probs.shape)
+            #apply temperature
+            probs /= param.temperature
+            probs = np.exp(probs)
+            psum = np.sum(probs,2)
+            probs /=np.expand_dims(psum,2)
+
+            l =[]
+            #print("probs")
+            #print(probs.shape)
+            for  j in range(sample_num):
+                p = probs[j,0,:]
+                res = np.random.multinomial(1,p)
+                res =  np.nonzero(res)[0][0]
+                l.append([res])
+
+            s = np.array(l)
+            sample_output.append(np.squeeze(s))
+            X,state = s,next_state
+
+        samples =np.array(sample_output).T.tolist()
+        #print('samples')
+        #print(samples)
+
+
+        res = []
+        for i,s in enumerate(samples):
+            si = []
+            for j,c in enumerate(s):
+                si.append(param.id2char[c])
+            res.append("".join(si))
+        return  res
+
+    def sample_process(self,sess,sample_num,sample_len,id2char):
         #random generate a char
         X =  sess.run(tf.random_uniform( (sample_num,1),0,len(id2char),tf.int32))
         state = None
@@ -357,10 +417,11 @@ def generate_batches(X,y,batch_num,batch_size,max_seq_len):
         def generate_one_batch(batch_idx):
             Xs = []
             ys = []
-            start_idx = batch_idx*batch_size*max_seq_len
+            start_idx = batch_idx*max_seq_len
             for j in range(batch_size):
                 Xs.append(X[start_idx+j*max_seq_len:start_idx+(j+1)*max_seq_len])
                 ys.append(y[start_idx+j*max_seq_len:start_idx+(j+1)*max_seq_len])
+                start_idx+= batch_size*max_seq_len
             return Xs,ys
 
         for i in range(batch_num):
@@ -424,7 +485,7 @@ class Parameter(object):
         self._data_info(datapath)
 
         #training parameter
-        self.epoch_num = 400
+        self.epoch_num = 200
         self.batch_size = 32
         self.val_per_epcoh_num = 5
         self.lr  = 0.01
@@ -435,10 +496,11 @@ class Parameter(object):
         self.save_per_epcoh_num = 5
 
         # sample parameter
-        self.sample_max_len = 200
+        self.sample_max_len = 1000
         self.sample_num = 3
-        self.sample_per_epcoh_num = 10
+        self.sample_per_epcoh_num = 5
         self.sample_save_path = './gen'
+        self.temperature = 0.09
 
 
 
@@ -449,13 +511,15 @@ class Parameter(object):
             self.vocab = set(s)
             print("Vocab size %d"%(len(self.vocab) ) )
 
-            self.id2char = list(self.vocab)
+            self.id2char = sorted(list(self.vocab))
             self.char2id = { c:i  for i,c in enumerate(self.id2char)}
 
             self.vocab_size = len(self.vocab)
 
             self.X = [self.char2id[c] for c in s]
             self.y = self.X[1:]+[None]
+
+
 
 
 

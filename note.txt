@@ -34,4 +34,14 @@ writer = tf.summary.FileWriter("log/", graph = sess.graph)
 4.當字元只有7000個左右的時候還是沒有辦法在training set 上面
 把loss降到3以下 所以用learning rate annealing
 
+5.reload ....
+reload有兩種方法
+1.自己重新定義 graph
+   load 進來的時候會一直說沒有初始化
+2.或者是用meta_graph+checkpoint
+    但是這種方法最好要能夠定義每一個operation的名字
+    不然meta graph取回來還是不知道如何access operation
+    dynamic rnn 的final state因為sample的需要,所以要能夠access
+    但是不知道名字... 解法用print的....
+
 
