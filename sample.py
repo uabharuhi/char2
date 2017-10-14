@@ -45,7 +45,7 @@ with tf.Session() as sess:
       #  strr+= parameter.id2char[s[0][0]]
       #  X,state = s,next_state
       #print(strr)
-      model.sample2file(sess,rnn_model,"GG",parameter,random=True)
+      model.sample2file(sess,rnn_model,"GG",parameter,random=False)
 
 #關於batch的問題
 #第一個問題

@@ -317,9 +317,26 @@ class RNN_Model(object):
 
     def random_sample_process(self,sess,sample_num,sample_len,param):
         #random generate a char
-        X =  sess.run(tf.random_uniform( (sample_num,1),0,len(param.id2char),tf.int32))
+
+        #
         state = None
         sample_output = []
+
+        pre_str = "the "
+        context = np.array([ param.char2id[c] for c in pre_str ]*sample_num)
+        context = np.reshape(context , (-1,len(pre_str )) )
+
+        #X =  sess.run(tf.random_uniform( (sample_num,1),0,len(param.id2char),tf.int32))
+        for i  in range( len(pre_str[0]) ):
+            X = context[:,i:i+1]
+            _,next_state  = self.prob_each_timestep(sess,X,state)
+            state = next_state
+
+
+
+
+        #防止大家都一樣...
+        X =  sess.run(tf.random_uniform( (sample_num,1),0,len(param.id2char),tf.int32))
         for i  in range(sample_len):
             probs,next_state  = self.prob_each_timestep(sess,X,state)
 
