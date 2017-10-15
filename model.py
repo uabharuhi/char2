@@ -436,9 +436,9 @@ def generate_batches(X,y,batch_num,batch_size,max_seq_len):
             ys = []
             start_idx = batch_idx*max_seq_len
             for j in range(batch_size):
-                Xs.append(X[start_idx+j*max_seq_len:start_idx+(j+1)*max_seq_len])
-                ys.append(y[start_idx+j*max_seq_len:start_idx+(j+1)*max_seq_len])
-                start_idx+= batch_size*max_seq_len
+                Xs.append(X[start_idx:start_idx+max_seq_len])
+                ys.append(y[start_idx:start_idx+max_seq_len])
+                start_idx+= max_seq_len*batch_num
             return Xs,ys
 
         for i in range(batch_num):
